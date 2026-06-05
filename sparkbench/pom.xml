@@ -185,10 +185,24 @@
     </profile>
 
     <profile>
+      <id>spark3.5</id>
+      <properties>
+        <spark.version>3.5.5</spark.version>
+        <spark.bin.version>3.5</spark.bin.version>
+      </properties>
+      <activation>
+        <property>
+          <name>spark</name>
+          <value>3.5</value>
+        </property>
+      </activation>
+    </profile>
+
+    <profile>
       <id>defaultScalaVersion</id>
       <properties>
-          <scala.version>2.11.8</scala.version>
-          <scala.binary.version>2.11</scala.binary.version>
+          <scala.version>2.12.15</scala.version>
+          <scala.binary.version>2.12</scala.binary.version>
       </properties>
       <activation>
         <property>
@@ -214,7 +228,7 @@
     <profile>
       <id>scala2.12</id>
       <properties>
-        <scala.version>2.12.7</scala.version>
+        <scala.version>2.12.15</scala.version>
         <scala.binary.version>2.12</scala.binary.version>
       </properties>
       <activation>

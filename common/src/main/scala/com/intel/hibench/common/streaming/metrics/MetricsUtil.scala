@@ -16,10 +16,13 @@
  */
 package com.intel.hibench.common.streaming.metrics
 
+import java.util.Properties
+import java.util.Collections
 import com.intel.hibench.common.streaming.Platform
-import kafka.admin.AdminUtils
-import kafka.utils.ZKStringSerializer
-import org.I0Itec.zkclient.ZkClient
+import org.apache.kafka.clients.admin.{AdminClient, AdminClientConfig, NewTopic}
+import kafka.zk.KafkaZkClient
+import org.apache.kafka.common.utils.Time
+import scala.collection.JavaConverters._
 
 object MetricsUtil {
 
@@ -34,15 +37,45 @@ object MetricsUtil {
   }
 
   def createTopic(zkConnect: String, topic: String, partitions: Int): Unit = {
-    val zkClient = new ZkClient(zkConnect, 6000, 6000, ZKStringSerializer)
+    val bootstrapServers = getBootstrapServers(zkConnect)
+    val props = new Properties()
+    props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers)
+    val adminClient = AdminClient.create(props)
     try {
-      AdminUtils.createTopic(zkClient, topic, partitions, 1)
-      while (!AdminUtils.topicExists(zkClient, topic)) {
-        Thread.sleep(100)
+      val newTopic = new NewTopic(topic, partitions, 1.toShort)
+      adminClient.createTopics(Collections.singletonList(newTopic)).all().get()
+      // Wait for topic to be created
+      var topicExists = false
+      while (!topicExists) {
+        val names = adminClient.listTopics().names().get()
+        topicExists = names.contains(topic)
+        if (!topicExists) {
+          Thread.sleep(100)
+        }
       }
     } catch {
       case e: Exception =>
         throw e
+    } finally {
+      adminClient.close()
+    }
+  }
+
+  def getBootstrapServers(zkConnect: String): String = {
+    val zkClient = KafkaZkClient(zkConnect, false, 6000, 6000, 100,
+      Time.SYSTEM, "metrics_util", "SessionExpireListener")
+    try {
+      val brokers = zkClient.getAllBrokersInCluster
+      if (brokers.isEmpty) {
+        throw new RuntimeException(s"No brokers found in ZooKeeper at $zkConnect")
+      }
+      brokers.flatMap { b =>
+        val eps = b.endPoints
+        if (eps.nonEmpty) {
+          val ep = eps.head
+          Some(s"${ep.host}:${ep.port}")
+        } else None
+      }.mkString(",")
     } finally {
       zkClient.close()
     }

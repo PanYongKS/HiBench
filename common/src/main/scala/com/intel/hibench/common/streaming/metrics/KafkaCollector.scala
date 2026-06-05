@@ -18,14 +18,15 @@
 package com.intel.hibench.common.streaming.metrics
 
 import java.io.{FileWriter, File}
-import java.util.Date
+import java.util.{Date, Properties}
 import java.util.concurrent.{TimeUnit, Future, Executors}
 
 import com.codahale.metrics.{UniformReservoir, Histogram}
-import kafka.utils.{ZKStringSerializer, ZkUtils}
-import org.I0Itec.zkclient.ZkClient
+import org.apache.kafka.clients.consumer.{KafkaConsumer => NewKafkaConsumer}
+import org.apache.kafka.common.serialization.ByteArrayDeserializer
 
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.JavaConverters._
 
 
 class KafkaCollector(zkConnect: String, metricsTopic: String,
@@ -60,11 +61,17 @@ class KafkaCollector(zkConnect: String, metricsTopic: String,
   }
 
   private def getPartitions(topic: String, zkConnect: String): Seq[Int] = {
-    val zkClient = new ZkClient(zkConnect, 6000, 6000, ZKStringSerializer)
+    val bootstrapServers = MetricsUtil.getBootstrapServers(zkConnect)
+    val props = new Properties()
+    props.put("bootstrap.servers", bootstrapServers)
+    props.put("key.deserializer", classOf[ByteArrayDeserializer].getName)
+    props.put("value.deserializer", classOf[ByteArrayDeserializer].getName)
+
+    val consumer = new NewKafkaConsumer[Array[Byte], Array[Byte]](props)
     try {
-      ZkUtils.getPartitionsForTopics(zkClient, Seq(topic)).flatMap(_._2).toSeq
+      consumer.partitionsFor(topic).asScala.map(_.partition()).toSeq
     } finally {
-      zkClient.close()
+      consumer.close()
     }
   }
 
@@ -110,5 +117,3 @@ class KafkaCollector(zkConnect: String, metricsTopic: String,
   }
 
 }
-
-

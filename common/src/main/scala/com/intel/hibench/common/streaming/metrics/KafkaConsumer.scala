@@ -16,46 +16,55 @@
  */
 package com.intel.hibench.common.streaming.metrics
 
-import java.util.Properties
-
-import kafka.api.{OffsetRequest, FetchRequestBuilder}
-import kafka.common.ErrorMapping._
-import kafka.common.TopicAndPartition
-import kafka.consumer.{ConsumerConfig, SimpleConsumer}
-import kafka.message.MessageAndOffset
-import kafka.utils.{ZKStringSerializer, ZkUtils, Utils}
-import org.I0Itec.zkclient.ZkClient
+import java.util.{Properties, Collections}
+import java.time.Duration
+import org.apache.kafka.clients.consumer.{KafkaConsumer => NewConsumer, ConsumerRecord}
+import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.serialization.ByteArrayDeserializer
+import scala.collection.JavaConverters._
 
 class KafkaConsumer(zookeeperConnect: String, topic: String, partition: Int) {
 
   private val CLIENT_ID = "metrics_reader"
-  private val props = new Properties()
-  props.put("zookeeper.connect", zookeeperConnect)
-  props.put("group.id", CLIENT_ID)
-  private val config = new ConsumerConfig(props)
-  private val consumer = createConsumer
 
-  private val earliestOffset = consumer
-      .earliestOrLatestOffset(TopicAndPartition(topic, partition), OffsetRequest.EarliestTime, -1)
+  private val bootstrapServers = MetricsUtil.getBootstrapServers(zookeeperConnect)
+
+  private val props = new Properties()
+  props.put("bootstrap.servers", bootstrapServers)
+  props.put("group.id", CLIENT_ID)
+  props.put("key.deserializer", classOf[ByteArrayDeserializer].getName)
+  props.put("value.deserializer", classOf[ByteArrayDeserializer].getName)
+  props.put("enable.auto.commit", "false")
+  props.put("auto.offset.reset", "earliest")
+  props.put("max.poll.records", "500")
+
+  private val consumer = new NewConsumer[Array[Byte], Array[Byte]](props)
+  private val topicPartition = new TopicPartition(topic, partition)
+
+  consumer.assign(Collections.singletonList(topicPartition))
+
+  private val earliestOffset: Long = {
+    val offsets = consumer.beginningOffsets(Collections.singletonList(topicPartition))
+    offsets.get(topicPartition)
+  }
   private var nextOffset: Long = earliestOffset
-  private var iterator: Iterator[MessageAndOffset] = getIterator(nextOffset)
+  consumer.seek(topicPartition, nextOffset)
+
+  private var iterator: Iterator[ConsumerRecord[Array[Byte], Array[Byte]]] = getIterator()
 
   def next(): Array[Byte] = {
-    val mo = iterator.next()
-    val message = mo.message
-
-    nextOffset = mo.nextOffset
-
-    Utils.readBytes(message.payload)
+    val record = iterator.next()
+    nextOffset = record.offset() + 1
+    record.value()
   }
 
   def hasNext: Boolean = {
     @annotation.tailrec
-    def hasNextHelper(iter: Iterator[MessageAndOffset], newIterator: Boolean): Boolean = {
+    def hasNextHelper(iter: Iterator[ConsumerRecord[Array[Byte], Array[Byte]]], newIterator: Boolean): Boolean = {
       if (iter.hasNext) true
       else if (newIterator) false
       else {
-        iterator = getIterator(nextOffset)
+        iterator = getIterator()
         hasNextHelper(iterator, newIterator = true)
       }
     }
@@ -66,33 +75,9 @@ class KafkaConsumer(zookeeperConnect: String, topic: String, partition: Int) {
     consumer.close()
   }
 
-  private def createConsumer: SimpleConsumer = {
-    val zkClient = new ZkClient(zookeeperConnect, 6000, 6000, ZKStringSerializer)
-    try {
-      val leader = ZkUtils.getLeaderForPartition(zkClient, topic, partition)
-          .getOrElse(throw new RuntimeException(
-            s"leader not available for TopicAndPartition($topic, $partition)"))
-      val broker = ZkUtils.getBrokerInfo(zkClient, leader)
-          .getOrElse(throw new RuntimeException(s"broker info not found for leader $leader"))
-      new SimpleConsumer(broker.host, broker.port,
-        config.socketTimeoutMs, config.socketReceiveBufferBytes, CLIENT_ID)
-    } catch {
-      case e: Exception =>
-        throw e
-    } finally {
-      zkClient.close()
-    }
-  }
-
-  private def getIterator(offset: Long): Iterator[MessageAndOffset] = {
-    val request = new FetchRequestBuilder()
-        .addFetch(topic, partition, offset, config.fetchMessageMaxBytes)
-        .build()
-
-    val response = consumer.fetch(request)
-    response.errorCode(topic, partition) match {
-      case NoError => response.messageSet(topic, partition).iterator
-      case error => throw exceptionFor(error)
-    }
+  private def getIterator(): Iterator[ConsumerRecord[Array[Byte], Array[Byte]]] = {
+    consumer.seek(topicPartition, nextOffset)
+    val records = consumer.poll(Duration.ofMillis(1000))
+    records.records(topicPartition).iterator().asScala
   }
 }
