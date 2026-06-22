@@ -18,7 +18,7 @@
 package com.intel.hibench.sparkbench.ml
 
 import com.intel.hibench.sparkbench.common.IOCommon
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
+import dev.ludovic.netlib.blas.BLAS.{getInstance => blas}
 
 import scala.util.Random
 
@@ -65,8 +65,9 @@ object LinearRegressionDataGenerator {
         def rndElement(i: Int) = {(rnd.nextDouble() - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)}
 
         part.map{ _ =>
-          val features = Vectors.dense(weights.indices.map{rndElement(_)}.toArray)
-          val label = blas.ddot(weights.length, weights, 1, features.toArray ,1) + eps * rnd.nextGaussian()
+          val featureValues = weights.indices.map{rndElement(_)}.toArray
+          val features = Vectors.dense(featureValues)
+          val label = blas.ddot(weights.length, weights, 1, featureValues, 1) + eps * rnd.nextGaussian()
           LabeledPoint(label, features)
         }
       }

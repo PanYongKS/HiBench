@@ -15,7 +15,8 @@ object LinearRegressionWithElasticNet {
       elasticNetParam: Double = 0.8,
       maxIter: Int = 10,
       tol: Double = 1E-6,
-      fracTest: Double = 0.25)
+      fracTest: Double = 0.25,
+      solver: String = "auto")
 
   def main(args: Array[String]): Unit = {
     val defaultParams = Params()
@@ -41,6 +42,9 @@ object LinearRegressionWithElasticNet {
         .text(s"fraction of data to hold out for testing. If given option testInput, " +
           s"this option is ignored. default: ${defaultParams.fracTest}")
         .action((x, c) => c.copy(fracTest = x))
+        opt[String]("solver")
+          .text(s"solver for LinearRegression, default: ${defaultParams.solver}")
+          .action((x, c) => c.copy(solver = x))
       arg[String]("<input>")
         .text("input path to labeled examples")
         .required()
@@ -73,7 +77,8 @@ object LinearRegressionWithElasticNet {
       .setLabelCol("label")
       .setMaxIter(params.maxIter)
       .setRegParam(params.regParam)
-      .setElasticNetParam(params.elasticNetParam)
+        .setElasticNetParam(params.elasticNetParam)
+        .setSolver(params.solver)
 
     // Fit the model
     val lrModel = lr.fit(training)

@@ -57,7 +57,7 @@ Supported modules includes: micro, ml(machine learning), sql, websearch, graph, 
 
 For example, to build Sparkbench with ML module using Spark 3.5 and Scala 2.12:
 
-    mvn -Psparkbench -Dmodules -Pml -Dspark3.5 -Dscala=3.12 clean package
+    mvn -Psparkbench -Dmodules -Pml -Dspark=3.5 -Dscala=2.12 clean package
 
 ### Build Structured Streaming ###
 For Spark 2.0 or higher versions, we add the benchmark support for Structured Streaming. This is a new module which cannot be compiled in Spark 1.6. And it won't get compiled by default even if you specify the spark version as 2.0 or higher. You must explicitly specify it like this:

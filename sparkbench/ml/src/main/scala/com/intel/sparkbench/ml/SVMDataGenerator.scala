@@ -18,10 +18,9 @@
 package com.intel.hibench.sparkbench.ml
 
 import com.intel.hibench.sparkbench.common.IOCommon
+import dev.ludovic.netlib.blas.BLAS.{getInstance => blas}
 
 import scala.util.Random
-
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Since}
